@@ -1,6 +1,6 @@
-# BACSE102 – Problem Solving using Java: Experiments 1–5
+# BACSE102 – Problem Solving using Java: Experiments 1–10
 
-Solutions to experiments **1 to 5** of the BACSE102 lab syllabus. Each experiment has
+Solutions to experiments **1 to 10** of the BACSE102 lab syllabus. Some experiments have
 sub-parts (a, b, c), and each sub-part is its own self-contained program.
 
 | Q | Part | Problem | File |
@@ -16,6 +16,12 @@ sub-parts (a, b, c), and each sub-part is its own self-contained program.
 | 4 | b | Fantasy game characters (abstract class) | [`Q4/FantasyGame.java`](Q4/FantasyGame.java) |
 | 5 | a | Washing machine (`Motor` interface) | [`Q5/WashingMachineDemo.java`](Q5/WashingMachineDemo.java) |
 | 5 | b | Unique characters with `StringBuilder` | [`Q5/UniqueCharacters.java`](Q5/UniqueCharacters.java) |
+| 6 | a | Grade validation with exception handling | [`Q6/GradeValidator.java`](Q6/GradeValidator.java) |
+| 6 | b | Time validation with custom exceptions | [`Q6/TimeValidator.java`](Q6/TimeValidator.java) |
+| 7 | – | Producer–consumer threads (`wait`/`notify`) | [`Q7/Main.java`](Q7/Main.java) |
+| 8 | – | 10% tax on prices via `prices.txt` → `tax.txt` | [`Q8/TaxCalculator.java`](Q8/TaxCalculator.java) |
+| 9 | – | Sentiment analysis via `input.txt` → `output.txt` | [`Q9/SentimentAnalysis.java`](Q9/SentimentAnalysis.java) |
+| 10 | – | km/h → m/s via `data.txt` → `converted.txt` | [`Q10/SpeedConverter.java`](Q10/SpeedConverter.java) |
 
 ## How to run
 
@@ -35,6 +41,8 @@ java -cp Q1 InterestCalculator
 Every file keeps its helper classes (e.g. `Rectangle`, `Employee`) in the same file, so one
 file is one complete program. The class with `main` comes first in each file, which is what
 `java File.java` expects.
+
+Q8–Q10 create their `.txt` files in the folder you run the command from.
 
 ---
 
@@ -312,4 +320,223 @@ e.g. `programming → progamin`.
 ```
 Enter a string: programming
 String with unique characters: progamin
+```
+
+## Q6(a) – Validating Student Grade Input (Exception Handling)
+
+**What it does:** reads a student's name and grade. If the grade is a whole number from 0 to
+100, it prints it. Otherwise it catches the exception and prints Java's message for it.
+
+| Input | What goes wrong | Exception | Thrown by |
+|---|---|---|---|
+| `abc`, `85.5` | not an integer | `NumberFormatException` | `Integer.parseInt()` |
+| `120`, `-5` | outside 0–100 | `IllegalArgumentException` | `validateGrade()` (our `throw`) |
+
+**Why it is written this way:**
+- **The grade is read with `nextLine()` and converted with `Integer.parseInt()`.** The
+  question names `NumberFormatException`, and that is what `parseInt` throws for bad text.
+  `sc.nextInt()` would throw a different exception (`InputMismatchException`).
+- **`validateGrade()` uses `throw`.** `throw new IllegalArgumentException("...")` stops the
+  method at once and jumps straight to the matching `catch`. The line that prints the grade
+  is skipped.
+- **Why two `catch` blocks instead of `catch (NumberFormatException | IllegalArgumentException e)`?**
+  The question asks for a multi-catch, but this exact multi-catch **does not compile**.
+  `NumberFormatException` is a *subclass* of `IllegalArgumentException`, and Java does not
+  allow a multi-catch whose types are parent and child:
+
+  ```
+  error: Alternatives in a multi-catch statement cannot be related by subclassing
+  ```
+
+  So one `try` has two `catch` blocks. The subclass `NumberFormatException` must come
+  *first*. If `IllegalArgumentException` came first, it would also catch every
+  `NumberFormatException`, the second block could never run, and the compiler rejects that
+  too. Q6(b) below shows a multi-catch that *is* allowed.
+- **`e.getMessage()`** prints the message stored in the exception. For `parseInt` that is
+  Java's own text (`For input string: "abc"`). For our `throw` it is the text we passed in.
+
+```
+Enter student name: Ravi
+Enter grade: abc
+NumberFormatException caught: For input string: "abc"
+```
+```
+Enter student name: Ravi
+Enter grade: 120
+IllegalArgumentException caught: Grade must be between 0 and 100, but was 120
+```
+
+## Q6(b) – Custom Exceptions for Time Validation
+
+**What it does:** reads hours, minutes and seconds (24-hour clock) and throws
+`InvalidHourException`, `InvalidMinuteException` or `InvalidSecondException` for the first
+part that is out of range. If all three are valid, it prints `Correct Time - h:m:s`.
+
+| Part | Valid range | Exception if invalid |
+|---|---|---|
+| hours | 0–23 | `InvalidHourException` |
+| minutes | 0–59 | `InvalidMinuteException` |
+| seconds | 0–59 | `InvalidSecondException` |
+
+**Key ideas:**
+- **A custom exception is just a class that `extends Exception`.** Its constructor passes
+  the message to the parent with `super(message)`, so `getMessage()` returns it later.
+- **Checked exceptions.** These extend `Exception`, not `RuntimeException`, so they are
+  *checked*. `validateTime()` must list them with `throws`, and the compiler refuses to
+  compile `main` unless it catches them. You can't forget to handle an invalid time.
+- **This multi-catch *is* legal:**
+  `catch (InvalidHourException | InvalidMinuteException | InvalidSecondException e)`. All
+  three are siblings (each extends `Exception` directly, none extends another), so Java
+  allows them in one block. Compare this with Q6(a).
+- **Typing letters instead of numbers** makes `nextInt()` throw `InputMismatchException`.
+  It gets its own `catch`, so the program prints a message instead of crashing.
+- `serialVersionUID` is there only because every `Exception` is `Serializable`. Without it,
+  `javac -Xlint` prints a warning. It has nothing to do with the time logic.
+
+```
+Enter hours: 12
+Enter minutes: 30
+Enter seconds: 45
+Correct Time - 12:30:45
+```
+```
+Enter hours: 25
+Enter minutes: 30
+Enter seconds: 45
+Invalid hours: 25 (must be between 0 and 23)
+```
+
+## Q7 – Producer and Consumer Threads with a Shared Buffer
+
+**What it does:** a `Producer` thread puts `Message 1` … `Message 5` into a one-slot
+`MessageBuffer`, and a `Consumer` thread takes each one out and prints it. `wait()` and
+`notify()` make the two threads take turns.
+
+```
+ Producer ──put()──►  [ MessageBuffer: 1 slot ]  ──take()──► Consumer
+   waits while FULL                                  waits while EMPTY
+```
+
+**How the synchronization works:**
+- **`synchronized (this)`.** Only one thread at a time can be inside a block that is
+  synchronized on the same object. The producer and consumer can never change `message` and
+  `empty` at the same moment.
+- **`wait()`.** If the producer finds the buffer full, it calls `wait()`. That *releases the
+  lock* and puts the thread to sleep. Releasing the lock matters: otherwise the consumer could
+  never get in to empty the buffer. The consumer does the same when the buffer is empty.
+- **`notify()`** wakes the thread that is waiting on the same object. After `put()` it wakes
+  the consumer ("a message is ready"). After `take()` it wakes the producer ("the slot is
+  free"). With exactly two threads, `notify()` is enough. With several producers or
+  consumers you would use `notifyAll()`.
+- **Why `while (...) wait();` and not `if`.** Java allows a thread to wake up without being
+  notified (a *spurious wakeup*). The `while` re-checks the condition after every wake-up.
+  If the buffer still isn't ready, the thread simply waits again.
+- **Why the Producer and Consumer also print inside `synchronized (buffer)`.** Holding the
+  lock while printing keeps the printed lines in the real order. Without it,
+  `Produced: Message 2` could appear before `Consumed: Message 1`. This works because Java
+  locks are *re-entrant*: a thread that holds a lock can enter another block on the same
+  object. `wait()` releases the lock completely, so the other thread can still get in.
+- **`implements Runnable`** keeps the job (`run()`) separate from the thread that runs it.
+  `new Thread(...).start()` starts the job on a new thread.
+- **`join()`** makes `main` wait for both threads before printing the final line.
+- **`InterruptedException`.** `wait()` can be interrupted. The threads catch it, restore the
+  interrupt flag with `Thread.currentThread().interrupt()`, and stop cleanly.
+
+```
+Produced: Message 1
+Consumed: Message 1
+Produced: Message 2
+Consumed: Message 2
+Produced: Message 3
+Consumed: Message 3
+Produced: Message 4
+Consumed: Message 4
+Produced: Message 5
+Consumed: Message 5
+All messages have been produced and consumed.
+```
+
+## Q8 – Final Prices with 10% Tax (File Input and Output)
+
+**What it does:** reads N prices, writes them to `prices.txt`, reads them back from that
+file, adds 10% tax, writes the results to `tax.txt` and prints them with 2 decimals.
+
+```
+keyboard ──► prices.txt ──► read back ──► price × 1.10 ──► tax.txt ──► screen
+```
+
+**Why it is written this way:**
+- **`PrintWriter(new FileWriter("prices.txt"))`** creates (or overwrites) the file and lets
+  you use the familiar `println`.
+- **`Scanner(new File("prices.txt"))`** reads the numbers back. The loop uses
+  `hasNextDouble()`, so it processes whatever is in the file without depending on N again.
+- **try-with-resources** (`try (PrintWriter w = ...) { }`) closes the file automatically,
+  even if an error happens. Closing also *flushes* the writer. Without it, the data can sit
+  in memory and `prices.txt` would be empty when read back.
+- **`IOException` is a checked exception.** File operations can fail (no permission, disk
+  full), so Java forces the program to handle that. The `catch` prints a clear message.
+- **Final price = `price × (1 + 0.10)`**, i.e. the price plus 10% of the price. It is
+  formatted once with `String.format("%.2f")`, and the same text goes to `tax.txt` and the
+  screen.
+- **No prompts:** the question gives an exact output format.
+
+```
+Input:                 Output:
+3                      110.00 220.00 330.00
+100.0 200.0 300.0
+```
+
+## Q9 – Basic Sentiment Analysis (File Input and Output)
+
+**What it does:** writes the entered sentence to `input.txt`, reads it back, classifies it
+as Positive, Negative or Neutral, writes the result to `output.txt` and displays it.
+
+**How it classifies:**
+1. Convert to lower case, so `Happy`, `HAPPY` and `happy` all match.
+2. Split into words on anything that is not a letter (`split("[^a-z]+")`). This removes
+   punctuation, so `good!` still matches `good`, and `unhappy` stays one word that does
+   *not* match `happy`.
+3. Count the positive keywords (happy, good, excellent, positive) and the negative keywords
+   (sad, bad, terrible, negative).
+4. More positive → **Positive**. More negative → **Negative**. No keywords, or a tie →
+   **Neutral**.
+
+**Why:**
+- **Counting instead of "first keyword found."** The question doesn't say what to do when a
+  sentence has both kinds. Counting treats both fairly: `Good food but bad service` is a
+  tie, so it is Neutral.
+- **`equals()`, not `==`, to compare Strings.** `==` checks whether two variables point to
+  the *same object*. `equals()` checks whether the *text* is the same.
+- **`BufferedReader.readLine()`** reads one whole line from the file, spaces included.
+- Same file-handling pattern as Q8: try-with-resources plus a `catch (IOException e)`.
+
+```
+Enter a sentence: I am so happy today, this is a good day!
+Sentiment: Positive
+```
+
+## Q10 – Converting km/h to m/s (File Input and Output)
+
+**What it does:** writes the entered speed to `data.txt`, reads it back, converts it to m/s,
+writes the result to `converted.txt` and displays it.
+
+**The formula:** 1 km = 1000 m and 1 hour = 3600 s, so
+
+```
+m/s = km/h × 1000 / 3600     (the same as km/h × 5/18)
+72 km/h  →  72 × 1000 / 3600  =  20.00 m/s
+```
+
+**Why:**
+- **`double`**, because speeds such as 27.78 m/s are not whole numbers.
+- **The speed is read back from `data.txt`** before converting, as the question requires,
+  rather than reusing the variable from the keyboard.
+- **The conversion lives in its own method, `kmphToMps()`**, so the formula sits in one
+  clearly named place.
+- `data.txt` stores the number as Java writes it (`72` becomes `72.0`).
+
+```
+Enter speed in km/h: 72
+Speed read from data.txt: 72.0 km/h
+Converted speed: 20.00 m/s
 ```
