@@ -339,21 +339,28 @@ String with unique characters: progamin
 - **`validateGrade()` uses `throw`.** `throw new IllegalArgumentException("...")` stops the
   method at once and jumps straight to the matching `catch`. The line that prints the grade
   is skipped.
-- **Why two `catch` blocks instead of `catch (NumberFormatException | IllegalArgumentException e)`?**
-  The question asks for a multi-catch, but this exact multi-catch **does not compile**.
-  `NumberFormatException` is a *subclass* of `IllegalArgumentException`, and Java does not
-  allow a multi-catch whose types are parent and child:
+- **Why not simply `catch (NumberFormatException | IllegalArgumentException e)`?**
+  That exact multi-catch **does not compile**. `NumberFormatException` is a *subclass* of
+  `IllegalArgumentException`, and Java does not allow a multi-catch whose types are parent
+  and child:
 
   ```
   error: Alternatives in a multi-catch statement cannot be related by subclassing
   ```
 
-  So one `try` has two `catch` blocks. The subclass `NumberFormatException` must come
-  *first*. If `IllegalArgumentException` came first, it would also catch every
-  `NumberFormatException`, the second block could never run, and the compiler rejects that
-  too. Q6(b) below shows a multi-catch that *is* allowed.
+- **The multi-catch this program uses instead:**
+  `catch (NumberFormatException | NoSuchElementException e)`.
+  - `NoSuchElementException` is what `nextLine()` throws when the input ends before a line
+    is typed (Ctrl+D, or an empty input file).
+  - It is unrelated to `NumberFormatException`, so Java allows the two together. Both mean
+    "there is no usable grade", so one block handles both.
+  - `IllegalArgumentException` gets its own `catch` **after** that block. A parent class must
+    be caught after its subclass. If it came first, it would also catch every
+    `NumberFormatException`, the later block could never run, and the compiler would reject
+    that too (`exception NumberFormatException has already been caught`).
 - **`e.getMessage()`** prints the message stored in the exception. For `parseInt` that is
   Java's own text (`For input string: "abc"`). For our `throw` it is the text we passed in.
+  `e.getClass().getSimpleName()` prints the name of the exception that was actually thrown.
 
 ```
 Enter student name: Ravi
@@ -382,14 +389,18 @@ part that is out of range. If all three are valid, it prints `Correct Time - h:m
 - **A custom exception is just a class that `extends Exception`.** Its constructor passes
   the message to the parent with `super(message)`, so `getMessage()` returns it later.
 - **Checked exceptions.** These extend `Exception`, not `RuntimeException`, so they are
-  *checked*. `validateTime()` must list them with `throws`, and the compiler refuses to
-  compile `main` unless it catches them. You can't forget to handle an invalid time.
+  *checked*. The compiler applies the *catch-or-declare* rule. `validateTime()` throws them,
+  so it must declare them with `throws`. `main` calls it, so `main` must either catch them or
+  declare them too. Here `main` catches them, so an invalid time prints a message instead of
+  crashing with a stack trace.
 - **This multi-catch *is* legal:**
   `catch (InvalidHourException | InvalidMinuteException | InvalidSecondException e)`. All
   three are siblings (each extends `Exception` directly, none extends another), so Java
-  allows them in one block. Compare this with Q6(a).
-- **Typing letters instead of numbers** makes `nextInt()` throw `InputMismatchException`.
-  It gets its own `catch`, so the program prints a message instead of crashing.
+  allows them in one block. Compare this with Q6(a), where the parent/child pair
+  `NumberFormatException | IllegalArgumentException` is rejected.
+- **Typing letters instead of numbers** makes `nextInt()` throw `InputMismatchException`. A
+  number too big for an `int` does the same. This exception gets its own `catch`, so the
+  program prints a message instead of crashing.
 - `serialVersionUID` is there only because every `Exception` is `Serializable`. Without it,
   `javac -Xlint` prints a warning. It has nothing to do with the time logic.
 
@@ -418,9 +429,9 @@ Invalid hours: 25 (must be between 0 and 23)
 ```
 
 **How the synchronization works:**
-- **`synchronized (this)`.** Only one thread at a time can be inside a block that is
-  synchronized on the same object. The producer and consumer can never change `message` and
-  `empty` at the same moment.
+- **`synchronized (this)`.** Only one thread at a time can *hold* an object's lock, so only
+  one thread at a time runs code in blocks synchronized on that object. The producer and
+  consumer can never change `message` and `empty` at the same moment.
 - **`wait()`.** If the producer finds the buffer full, it calls `wait()`. That *releases the
   lock* and puts the thread to sleep. Releasing the lock matters: otherwise the consumer could
   never get in to empty the buffer. The consumer does the same when the buffer is empty.
@@ -473,8 +484,14 @@ keyboard ──► prices.txt ──► read back ──► price × 1.10 ──
 - **try-with-resources** (`try (PrintWriter w = ...) { }`) closes the file automatically,
   even if an error happens. Closing also *flushes* the writer. Without it, the data can sit
   in memory and `prices.txt` would be empty when read back.
-- **`IOException` is a checked exception.** File operations can fail (no permission, disk
-  full), so Java forces the program to handle that. The `catch` prints a clear message.
+- **`IOException` is a checked exception.** Opening a file can fail (no permission, a missing
+  folder, a folder with the same name). So `new FileWriter(...)` and
+  `new Scanner(new File(...))` can throw it, and Java forces the program to handle it. The
+  `catch` prints a clear message.
+- **`PrintWriter` never throws `IOException`, even while writing.** If a write fails (for
+  example, the disk is full), it only remembers the error. You can check for that with
+  `writer.checkError()`. This program does not call it, so a failed write would go
+  unnoticed. This is fine for a lab exercise, but worth knowing.
 - **Final price = `price × (1 + 0.10)`**, i.e. the price plus 10% of the price. It is
   formatted once with `String.format("%.2f")`, and the same text goes to `tax.txt` and the
   screen.
@@ -493,9 +510,9 @@ as Positive, Negative or Neutral, writes the result to `output.txt` and displays
 
 **How it classifies:**
 1. Convert to lower case, so `Happy`, `HAPPY` and `happy` all match.
-2. Split into words on anything that is not a letter (`split("[^a-z]+")`). This removes
-   punctuation, so `good!` still matches `good`, and `unhappy` stays one word that does
-   *not* match `happy`.
+2. Split into words on anything that is not an English letter a–z (`split("[^a-z]+")`).
+   This removes punctuation, so `good!` still matches `good`, and `unhappy` stays one word
+   that does *not* match `happy`.
 3. Count the positive keywords (happy, good, excellent, positive) and the negative keywords
    (sad, bad, terrible, negative).
 4. More positive → **Positive**. More negative → **Negative**. No keywords, or a tie →

@@ -35,7 +35,8 @@ class MessageBuffer {
     private boolean empty = true;
 
     public void put(String newMessage) throws InterruptedException {
-        // Only one thread at a time can be inside a block synchronized on the same object.
+        // Only one thread at a time can HOLD this object's lock, so only one thread at a
+        // time runs code in blocks synchronized on it. (wait() gives the lock up.)
         synchronized (this) {
             // "while", not "if": after waking up, check the condition again. Java allows
             // a thread to wake up without being notified (a "spurious wakeup").

@@ -32,7 +32,8 @@ public class TimeValidator {
             // so Java allows them in one catch. They are all handled the same way.
             System.out.println(e.getMessage());
         } catch (InputMismatchException e) {
-            System.out.println("Invalid input: hours, minutes and seconds must be whole numbers.");
+            // nextInt() throws this for text like "ab", and also for a number too big for an int.
+            System.out.println("Invalid input: enter a whole number (like 12) for hours, minutes and seconds.");
         }
 
         sc.close();

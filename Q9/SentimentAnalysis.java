@@ -66,8 +66,8 @@ public class SentimentAnalysis {
         }
 
         // Lower-case first so "Happy" and "HAPPY" match "happy". Then split on every run
-        // of non-letters, so punctuation ("good!", "bad,") does not stop a match and
-        // "unhappy" is not counted as "happy".
+        // of characters that are not English letters a-z, so punctuation ("good!", "bad,")
+        // does not stop a match and "unhappy" is not counted as "happy".
         String[] words = sentence.toLowerCase().split("[^a-z]+");
 
         int positiveCount = 0;

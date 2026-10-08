@@ -25,8 +25,9 @@ public class TaxCalculator {
         Scanner sc = new Scanner(System.in);
         int n = sc.nextInt();
 
-        // File operations can fail (no permission, disk full, ...). Java forces us to
-        // handle IOException because it is a checked exception.
+        // Opening a file can fail (no permission, a missing folder, ...), so new FileWriter(...)
+        // and new Scanner(new File(...)) can throw IOException. It is a checked exception,
+        // so Java forces us to handle it.
         try {
             // Step 1: write the entered prices to prices.txt, one per line.
             // try-with-resources: the writer is closed automatically at the end of the
