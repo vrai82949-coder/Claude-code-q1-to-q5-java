@@ -585,16 +585,24 @@ second run:  bankAccount.ser ─► readObject ─► same account, same balance
   `writeObject(account)`. The object stream turns the object into bytes, and the file stream
   writes them to disk.
 - **Loading:** `ObjectInputStream(new FileInputStream(...))` and then `readObject()`.
-  `readObject()` returns a plain `Object`, so it is cast back with `(BankAccount)`. It can
-  throw `ClassNotFoundException` as well as `IOException`, so both are caught.
+  `readObject()` returns a plain `Object`. The code checks it with
+  `instanceof BankAccount` before casting with `(BankAccount)`, so a file containing some
+  other kind of object can't cause a `ClassCastException`. `readObject()` declares
+  `ClassNotFoundException` as well as `IOException`, so both are caught.
 - **Checking `file.exists()` first.** On the very first run there is no file yet, so the
   program creates a new account instead of failing. If the file exists but is damaged, the
-  error is caught and a new account is started.
+  error is caught and a new account is started. A badly damaged file can also make
+  `readObject()` throw *unchecked* exceptions, so the catch includes `RuntimeException` as
+  well.
 - **`serialVersionUID`** is a version number stored in the file. If the class is later
   changed and the number is updated, Java refuses old files instead of loading them wrongly.
 - **`deposit()` and `withdraw()` return `true` or `false`.** The account checks the rules
   (amount > 0, can't withdraw more than the balance), and `main` decides what message to
   print.
+- **`Double.isFinite(amount)`.** `Scanner.nextDouble()` accepts the words `NaN` and
+  `Infinity`. `NaN` is false in *every* comparison, so `amount <= 0` alone would let it
+  through, and the balance would become `NaN` and be saved that way.
+  `Double.isFinite(...)` rejects both special values.
 
 ```
 No saved account found (bankAccount.ser does not exist yet).
@@ -635,10 +643,15 @@ to `savings.ser`, deserializes it into a **new** object, and prints that object'
 **Why it is written this way:**
 - **The category comes from the *deserialized* object.** That proves the data survived the
   trip to the file and back, which is the point of the exercise.
-- **Percentage = `savings * 100 / salary`.** Multiplying *before* dividing matters at the
-  boundaries. In a `double`, `0.07 * 100` is `7.000000000000001`. With whole-number inputs,
-  multiplying first gives exactly `10.0` for 100 out of 1000, so the boundary cases land in
-  the right category.
+- **Percentage = `savings * 100 / salary`, then rounded to 6 decimal places.** A `double`
+  cannot store most decimal numbers exactly. A percentage that should be exactly 10 can come
+  out as `9.999999999999998`; for example, savings `0.29` out of salary `2.9` does. Without
+  the rounding, that would be "Poor savings" even though the screen shows `10.00%`. Rounding
+  to 6 decimals removes the tiny error but keeps the real value, so amounts exactly on 1%,
+  10% or 20% get the right category.
+- **The displayed percentage is rounded to 2 decimals.** The category uses the more precise
+  value. So 9.99 out of 1000 (0.999%) prints as `1.00%`, but it is really below 1% and
+  correctly gets "Invalid input".
 - **A salary of 0 or less is "Invalid input".** Dividing by zero makes no sense, so that case
   is checked first.
 - **`%.2f%%`** prints the number with 2 decimals followed by a literal `%`. In `printf`, `%%`
@@ -748,11 +761,15 @@ Delhi:   25 28 22 27     → sorted 22 [25 27] 28      → 26.00
 - **`HashMap`** finds a city's list straight from its name, without searching. `put(key,
   value)` stores, `get(key)` reads, and `containsKey(key)` checks whether the key exists.
 - **If the same city is entered twice,** its readings are added to the existing list instead
-  of replacing it. That is why the code checks `containsKey` before `put`.
+  of replacing it. That is why the code checks `containsKey` before `put`. Names must match
+  exactly. Spaces around a name are ignored, but `Delhi` and `delhi` count as different
+  cities, because `String` keys are case-sensitive.
 - **Per city *and* overall.** The question can be read as "median for each city" or "one
   median over all the data", so the program prints both.
 - **A `HashMap` has no order.** Printing it directly could list the cities in any order.
-  The keys are copied into a list and sorted, so the output is alphabetical and predictable.
+  The keys are copied into a list and sorted with `String.CASE_INSENSITIVE_ORDER`, so the
+  output is alphabetical and predictable. A plain `Collections.sort` would put every
+  capitalised name first (`Zurich` before `agra`), because it compares character codes.
 - **The median sorts a copy** (`new ArrayList<>(values)`), so the original readings keep the
   order they were entered in.
 - **`n / 2` is integer division.** For 5 readings it gives index 2 (the middle). For 4
@@ -799,7 +816,9 @@ The table it creates (also in [`Q16/setup.sql`](Q16/setup.sql)):
 2. **Download MySQL Connector/J**, the JDBC driver. Get it from
    <https://dev.mysql.com/downloads/connector/j/> (choose "Platform Independent") or from
    Maven Central (`com.mysql:mysql-connector-j`). You need the `.jar` file, e.g.
-   `mysql-connector-j-9.4.0.jar`.
+   `mysql-connector-j-9.4.0.jar`. **Copy it into the `Q16` folder** so the commands below
+   find it. If the jar isn't where `-cp` says, Java silently ignores that entry, and you get
+   "No suitable driver".
 3. **Edit the three constants** at the top of `EmployeeApp.java`: `DB_URL`, `DB_USER` and
    `DB_PASSWORD`. You do *not* need to create the database or table. The program creates
    them on its first run (`createDatabaseIfNotExist=true` and `CREATE TABLE IF NOT EXISTS`).
@@ -809,8 +828,11 @@ The table it creates (also in [`Q16/setup.sql`](Q16/setup.sql)):
    ```bash
    javac EmployeeApp.java
    java -cp .:mysql-connector-j-9.4.0.jar EmployeeApp      # Linux / macOS
-   java -cp .;mysql-connector-j-9.4.0.jar EmployeeApp      # Windows (; instead of :)
+   java -cp ".;mysql-connector-j-9.4.0.jar" EmployeeApp    # Windows (; instead of :)
    ```
+
+   On Windows, keep the quotes. In PowerShell (the default Windows terminal), an unquoted `;`
+   ends the command.
 
    In Eclipse or IntelliJ, add the jar to the project's libraries / build path instead.
 
@@ -830,10 +852,15 @@ The table it creates (also in [`Q16/setup.sql`](Q16/setup.sql)):
 - **`PreparedStatement` with `?` instead of joining strings.** Building
   `"... VALUES ('" + name + "')"` breaks as soon as a name contains a quote (`O'Brien`), and
   it lets a user inject their own SQL (*SQL injection*). With `?` placeholders the driver
-  sends the values separately from the command, so any text is safe. The test run above
-  stored `O'Brien` correctly.
-- **`executeUpdate()` returns the number of rows changed.** For Update and Delete, `0` means
-  no employee has that ID, so the program says so instead of pretending it worked.
+  always treats the values as *data*, never as SQL. MySQL Connector/J escapes each value
+  before building the command: `O'Brien` is sent as `'O''Brien'`. Some other drivers, or
+  Connector/J with `useServerPrepStmts=true`, send the values separately instead. Either way
+  a user's text cannot change what the command does. The test run below stores `O'Brien`
+  correctly (see *View Employees*).
+- **`executeUpdate()` returns a row count.** For DELETE it is the number of rows deleted.
+  For UPDATE, MySQL Connector/J by default counts the rows the `WHERE` clause *matched*, so
+  setting a salary to the value it already has still counts as 1. Either way, `0` means no
+  employee has that ID, so the program says so instead of pretending it worked.
 - **`RETURN_GENERATED_KEYS`** asks MySQL for the `id` it just generated, so *Add* can report
   "Employee added with ID 3."
 - **`ResultSet`** works like a cursor over the rows of a SELECT. `while (rs.next())` visits

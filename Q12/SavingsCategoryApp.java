@@ -76,10 +76,12 @@ class SavingsData implements Serializable {
     }
 
     double getSavingsPercentage() {
-        // Multiply before dividing: with whole-number inputs this gives exactly 10.0 for
-        // 100 out of 1000. (savings / salary * 100 can land a tiny bit off, e.g. 0.07 * 100
-        // is 7.000000000000001 in a double, which matters right at a category boundary.)
-        return savings * 100 / salary;
+        double percentage = savings * 100 / salary;
+        // A double cannot store most decimal numbers exactly, so a percentage that should be
+        // exactly 10 can come out as 9.999999999999998 (e.g. savings 0.29 out of salary 2.9).
+        // Rounding to 6 decimal places removes that tiny error, so values that are exactly
+        // on a boundary (1%, 10%, 20%) get the right category.
+        return Math.round(percentage * 1_000_000) / 1_000_000.0;
     }
 
     String getCategory() {

@@ -102,15 +102,20 @@ public class EmployeeApp {
     static void addEmployee(Connection conn, Scanner sc) throws SQLException {
         String name = readText(sc, "Enter name: ");
         String department = readText(sc, "Enter department: ");
+        if (name.isEmpty() || department.isEmpty()) {
+            System.out.println("Name and department cannot be empty.");
+            return;
+        }
         double salary = readDouble(sc, "Enter salary: ");
         if (salary < 0) {
             System.out.println("Salary cannot be negative.");
             return;
         }
 
-        // The ? placeholders are filled in with setString/setDouble. The driver sends the
-        // values separately from the SQL, so input such as  O'Brien  cannot break the
-        // command (this is what protects against "SQL injection").
+        // The ? placeholders are filled in with setString/setDouble. The driver always treats
+        // those values as DATA, never as SQL: MySQL Connector/J escapes them (O'Brien is sent
+        // as 'O''Brien'). So a user's text can never change what the command does - this is
+        // what protects against "SQL injection".
         String sql = "INSERT INTO employees (name, department, salary) VALUES (?, ?, ?)";
         // RETURN_GENERATED_KEYS asks MySQL to hand back the id it generated (AUTO_INCREMENT).
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -164,7 +169,9 @@ public class EmployeeApp {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setDouble(1, newSalary);
             ps.setInt(2, id);
-            // executeUpdate() returns how many rows were changed: 0 means no such ID.
+            // executeUpdate() returns a row count. For UPDATE, MySQL Connector/J counts the rows
+            // the WHERE clause MATCHED (setting the same salary again still counts as 1),
+            // so 0 means no employee has that ID.
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 System.out.println("Salary updated for employee ID " + id + ".");
@@ -180,7 +187,7 @@ public class EmployeeApp {
         String sql = "DELETE FROM employees WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
-            int rows = ps.executeUpdate();
+            int rows = ps.executeUpdate();   // number of rows deleted: 0 means no such ID
             if (rows > 0) {
                 System.out.println("Employee ID " + id + " deleted.");
             } else {

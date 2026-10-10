@@ -45,10 +45,18 @@ public class MedianTemperature {
             }
         }
 
+        if (cityTemperatures.isEmpty()) {
+            System.out.println("No cities entered.");
+            sc.close();
+            return;
+        }
+
         // A HashMap does not keep its keys in any particular order, so the city names
         // are copied into a list and sorted to print them alphabetically.
+        // CASE_INSENSITIVE_ORDER puts "agra" before "Zurich"; a plain sort would put every
+        // capitalised name first, because 'Z' has a smaller character code than 'a'.
         List<String> cities = new ArrayList<>(cityTemperatures.keySet());
-        Collections.sort(cities);
+        Collections.sort(cities, String.CASE_INSENSITIVE_ORDER);
 
         List<Double> allReadings = new ArrayList<>();
         System.out.println();

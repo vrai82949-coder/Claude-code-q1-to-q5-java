@@ -95,10 +95,20 @@ public class BankAccountApp {
         }
         // ObjectInputStream reads objects; FileInputStream supplies the raw bytes from the file.
         try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(file))) {
-            // readObject() returns a plain Object, so it is cast back to BankAccount.
-            return (BankAccount) in.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            System.out.println("Could not read " + FILE_NAME + " (" + e.getMessage() + "). Starting fresh.");
+            // readObject() returns a plain Object. Check its type with instanceof before
+            // casting, so a file holding some other kind of object cannot cause a
+            // ClassCastException.
+            Object saved = in.readObject();
+            if (saved instanceof BankAccount) {
+                return (BankAccount) saved;
+            }
+            System.out.println(FILE_NAME + " does not contain a bank account. Starting fresh.");
+            return null;
+        } catch (IOException | ClassNotFoundException | RuntimeException e) {
+            // IOException and ClassNotFoundException are the checked exceptions readObject()
+            // declares. A badly damaged file can also make it throw unchecked (Runtime)
+            // exceptions, so those are caught too: any unreadable file means "start fresh".
+            System.out.println("Could not read " + FILE_NAME + " (" + e + "). Starting fresh.");
             return null;
         }
     }
@@ -131,7 +141,9 @@ class BankAccount implements Serializable {
 
     // Returns true if the deposit was accepted, so the caller can print the right message.
     boolean deposit(double amount) {
-        if (amount <= 0) {
+        // Double.isFinite rejects the special values NaN and Infinity, which Scanner accepts
+        // as input. NaN is false in every comparison, so "amount <= 0" alone would let it in.
+        if (!Double.isFinite(amount) || amount <= 0) {
             return false;
         }
         balance += amount;
@@ -139,7 +151,7 @@ class BankAccount implements Serializable {
     }
 
     boolean withdraw(double amount) {
-        if (amount <= 0 || amount > balance) {
+        if (!Double.isFinite(amount) || amount <= 0 || amount > balance) {
             return false;
         }
         balance -= amount;
