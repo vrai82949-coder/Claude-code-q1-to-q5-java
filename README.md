@@ -1,6 +1,6 @@
-# BACSE102 – Problem Solving using Java: Experiments 1–10
+# BACSE102 – Problem Solving using Java: Experiments 1–16
 
-Solutions to experiments **1 to 10** of the BACSE102 lab syllabus. Some experiments have
+Solutions to all **16** experiments of the BACSE102 lab syllabus. Some experiments have
 sub-parts (a, b, c), and each sub-part is its own self-contained program.
 
 | Q | Part | Problem | File |
@@ -22,6 +22,12 @@ sub-parts (a, b, c), and each sub-part is its own self-contained program.
 | 8 | – | 10% tax on prices via `prices.txt` → `tax.txt` | [`Q8/TaxCalculator.java`](Q8/TaxCalculator.java) |
 | 9 | – | Sentiment analysis via `input.txt` → `output.txt` | [`Q9/SentimentAnalysis.java`](Q9/SentimentAnalysis.java) |
 | 10 | – | km/h → m/s via `data.txt` → `converted.txt` | [`Q10/SpeedConverter.java`](Q10/SpeedConverter.java) |
+| 11 | – | Bank account saved with serialization | [`Q11/BankAccountApp.java`](Q11/BankAccountApp.java) |
+| 12 | – | Savings category after serialize/deserialize | [`Q12/SavingsCategoryApp.java`](Q12/SavingsCategoryApp.java) |
+| 13 | – | Generic `RecordHolder<T>` | [`Q13/Main.java`](Q13/Main.java) |
+| 14 | – | Student registration with `ArrayList` | [`Q14/StudentRegistration.java`](Q14/StudentRegistration.java) |
+| 15 | – | Median temperature with `HashMap` | [`Q15/MedianTemperature.java`](Q15/MedianTemperature.java) |
+| 16 | – | Employee management with JDBC + MySQL | [`Q16/EmployeeApp.java`](Q16/EmployeeApp.java), [`Q16/setup.sql`](Q16/setup.sql) |
 
 ## How to run
 
@@ -42,7 +48,8 @@ Every file keeps its helper classes (e.g. `Rectangle`, `Employee`) in the same f
 file is one complete program. The class with `main` comes first in each file, which is what
 `java File.java` expects.
 
-Q8–Q10 create their `.txt` files in the folder you run the command from.
+Q8–Q12 create their `.txt` / `.ser` files in the folder you run the command from.
+Q16 also needs MySQL and its JDBC driver; see [Q16](#q16--employee-management-system-jdbc--mysql) for the setup.
 
 ---
 
@@ -556,4 +563,321 @@ m/s = km/h × 1000 / 3600     (the same as km/h × 5/18)
 Enter speed in km/h: 72
 Speed read from data.txt: 72.0 km/h
 Converted speed: 20.00 m/s
+```
+
+## Q11 – Persistent Bank Account (Serialization)
+
+**What it does:** a menu lets you deposit, withdraw and check your balance. When you choose
+*Save and exit*, the `BankAccount` object is **serialized** (saved) to `bankAccount.ser`. The
+next time the program starts, it **deserializes** (loads) that file, so you continue with the
+saved balance. The final balance is printed with 2 decimal places.
+
+```
+first run:   new account ─► transactions ─► writeObject ─► bankAccount.ser
+second run:  bankAccount.ser ─► readObject ─► same account, same balance ─► more transactions
+```
+
+**Key ideas:**
+- **`implements Serializable`.** This is what allows a `BankAccount` to be written with
+  `ObjectOutputStream`. `Serializable` has no methods to implement; it only *marks* the class
+  as safe to save. Without it, `writeObject` throws `NotSerializableException`.
+- **Saving:** `ObjectOutputStream(new FileOutputStream("bankAccount.ser"))` and then
+  `writeObject(account)`. The object stream turns the object into bytes, and the file stream
+  writes them to disk.
+- **Loading:** `ObjectInputStream(new FileInputStream(...))` and then `readObject()`.
+  `readObject()` returns a plain `Object`, so it is cast back with `(BankAccount)`. It can
+  throw `ClassNotFoundException` as well as `IOException`, so both are caught.
+- **Checking `file.exists()` first.** On the very first run there is no file yet, so the
+  program creates a new account instead of failing. If the file exists but is damaged, the
+  error is caught and a new account is started.
+- **`serialVersionUID`** is a version number stored in the file. If the class is later
+  changed and the number is updated, Java refuses old files instead of loading them wrongly.
+- **`deposit()` and `withdraw()` return `true` or `false`.** The account checks the rules
+  (amount > 0, can't withdraw more than the balance), and `main` decides what message to
+  print.
+
+```
+No saved account found (bankAccount.ser does not exist yet).
+Creating a new account.
+Enter account holder name: Sam
+Current balance: 0.00
+...
+Enter your choice: 1
+Enter amount to deposit: 1000
+Deposited 1000.00. New balance: 1000.00
+...
+Enter your choice: 2
+Enter amount to withdraw: 250.50
+Withdrew 250.50. New balance: 749.50
+...
+Enter your choice: 4
+Account saved to bankAccount.ser.
+Final balance: 749.50
+```
+Run it again:
+```
+Saved account loaded. Welcome back, Sam!
+Current balance: 749.50
+```
+
+## Q12 – Savings Category (Serialization)
+
+**What it does:** reads salary and savings, puts them in a `SavingsData` object, serializes it
+to `savings.ser`, deserializes it into a **new** object, and prints that object's category.
+
+| Savings percentage | Category |
+|---|---|
+| 1% (inclusive) up to, but not including, 10% | Poor savings |
+| 10% (inclusive) up to, but not including, 20% | Good savings |
+| 20% or more | High savings |
+| anything else (below 1%, or salary ≤ 0) | Invalid input |
+
+**Why it is written this way:**
+- **The category comes from the *deserialized* object.** That proves the data survived the
+  trip to the file and back, which is the point of the exercise.
+- **Percentage = `savings * 100 / salary`.** Multiplying *before* dividing matters at the
+  boundaries. In a `double`, `0.07 * 100` is `7.000000000000001`. With whole-number inputs,
+  multiplying first gives exactly `10.0` for 100 out of 1000, so the boundary cases land in
+  the right category.
+- **A salary of 0 or less is "Invalid input".** Dividing by zero makes no sense, so that case
+  is checked first.
+- **`%.2f%%`** prints the number with 2 decimals followed by a literal `%`. In `printf`, `%%`
+  is how you print a percent sign.
+
+```
+Enter salary: 50000
+Enter savings: 3000
+SavingsData serialized to savings.ser
+SavingsData deserialized from savings.ser
+Savings percentage: 6.00%
+Category: Poor savings
+```
+
+## Q13 – Generic Record Holder
+
+**What it does:** one generic class, `RecordHolder<T>`, holds either a `GradeRecord` or an
+`EnrollmentRecord`. `main` creates one holder of each kind and calls `getRecord()` and
+`displayRecordInfo()` on both.
+
+```
+interface AcademicRecord { void displayRecordInfo(); }
+        ▲                         ▲
+   GradeRecord              EnrollmentRecord
+"Grade for Alice: 92.5"    "Student 101 is enrolled in Java Programming"
+
+RecordHolder<T extends AcademicRecord>
+  private T record;   T getRecord();   void displayRecordInfo() → record.displayRecordInfo()
+```
+
+**Key ideas:**
+- **Generics.** `T` is a type placeholder. `RecordHolder<GradeRecord>` is a holder whose `T`
+  is `GradeRecord`, so `getRecord()` returns a `GradeRecord` with **no cast**. Putting the
+  wrong type in is a compile error, not a crash at run time. That is the "type-safe" part
+  of the question.
+- **Why `T extends AcademicRecord` (a bounded type)?** `RecordHolder.displayRecordInfo()`
+  needs to call `record.displayRecordInfo()`. With a plain `<T>`, Java only knows that `T`
+  is some `Object`, which has no such method. The bound says "T must implement
+  `AcademicRecord`", so the call compiles. It also stops nonsense such as
+  `RecordHolder<String>`.
+- **The output depends on the record type** (the question's "implementation will depend on
+  the specific type"). Each record class supplies its own `displayRecordInfo()`, and the
+  holder simply calls it. This is the polymorphism from Q4(b), applied to a generic class.
+- **`Double` and `Integer`.** The question asks for wrapper classes. Java converts between
+  `double` and `Double` automatically (*autoboxing*), so you can pass a plain `92.5`.
+- **The diamond `<>`** in `new RecordHolder<>(...)` lets Java work out the type from the
+  left-hand side.
+
+```
+Enter student name: Alice
+Enter grade: 92.5
+Enter course name: Java Programming
+Enter student ID: 101
+
+getRecord() returned the grade record of Alice
+Grade for Alice: 92.5
+getRecord() returned the enrollment record for Java Programming
+Student 101 is enrolled in Java Programming
+```
+
+## Q14 – Student Registration (ArrayList)
+
+**What it does:** reads how many students to register and their names into an `ArrayList`,
+prints the list, and then shows the name at the index you enter.
+
+**Key ideas:**
+- **`ArrayList` vs array.** An array's size is fixed when you create it. An `ArrayList` grows
+  as you `add()` to it, which suits a list of registrations.
+- **`add(name)`** appends to the end of the list. **`get(index)`** reads one element.
+  **`size()`** is the number of elements.
+- **Indexes start at 0.** The first name registered is at index 0. The prompts show each
+  student's index (`[0]`, `[1]`, …) to make that clear.
+- **The index is checked before `get()`.** `get()` with an index outside `0 … size()-1` throws
+  `IndexOutOfBoundsException`. Checking first lets the program print a helpful message
+  instead of crashing.
+- **The `nextInt()` / `nextLine()` trap.** `nextInt()` reads the number but leaves the Enter
+  key behind. The extra `sc.nextLine()` right after it throws that away. Without it, the
+  first student's name would be read as an empty line.
+
+```
+Enter number of students: 3
+Enter name of student [0]: Asha Kumar
+Enter name of student [1]: Ravi
+Enter name of student [2]: Meena
+Registered students: [Asha Kumar, Ravi, Meena]
+Enter index to retrieve (0 to 2): 1
+Student at index 1: Ravi
+```
+
+## Q15 – Median Temperature (HashMap)
+
+**What it does:** stores each city's temperature readings in a
+`HashMap<String, List<Double>>` (city → readings). It then prints the median for each city
+and the median of all readings together.
+
+**How the median is found** (as the question describes):
+1. Sort the numbers in ascending order.
+2. If the count is odd, take the middle number. If it is even, take the average of the two
+   middle numbers.
+
+```
+Chennai: 30 32 31 35 33  → sorted 30 31 [32] 33 35   → 32.00
+Delhi:   25 28 22 27     → sorted 22 [25 27] 28      → 26.00
+```
+
+**Why:**
+- **`HashMap`** finds a city's list straight from its name, without searching. `put(key,
+  value)` stores, `get(key)` reads, and `containsKey(key)` checks whether the key exists.
+- **If the same city is entered twice,** its readings are added to the existing list instead
+  of replacing it. That is why the code checks `containsKey` before `put`.
+- **Per city *and* overall.** The question can be read as "median for each city" or "one
+  median over all the data", so the program prints both.
+- **A `HashMap` has no order.** Printing it directly could list the cities in any order.
+  The keys are copied into a list and sorted, so the output is alphabetical and predictable.
+- **The median sorts a copy** (`new ArrayList<>(values)`), so the original readings keep the
+  order they were entered in.
+- **`n / 2` is integer division.** For 5 readings it gives index 2 (the middle). For 4
+  readings it gives index 2, and the two middle numbers are at indexes 1 and 2.
+
+```
+Enter number of cities: 3
+Enter name of city 1: Chennai
+Enter temperature readings for Chennai (separated by spaces): 30 32 31 35 33
+Enter name of city 2: Delhi
+Enter temperature readings for Delhi (separated by spaces): 25 28 22 27
+Enter name of city 3: Mumbai
+Enter temperature readings for Mumbai (separated by spaces): 29
+
+Median temperature of Chennai: 32.00
+Median temperature of Delhi: 26.00
+Median temperature of Mumbai: 29.00
+Overall median temperature (all cities): 29.50
+```
+
+## Q16 – Employee Management System (JDBC + MySQL)
+
+**What it does:** a menu-driven program, `EmployeeApp.java`, that stores employees in a MySQL
+table:
+
+1. Add Employee
+2. View Employees
+3. Update Employee Salary
+4. Delete Employee
+5. Exit
+
+The table it creates (also in [`Q16/setup.sql`](Q16/setup.sql)):
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `INT AUTO_INCREMENT PRIMARY KEY` | MySQL numbers employees 1, 2, 3, … |
+| `name` | `VARCHAR(100)` | |
+| `department` | `VARCHAR(50)` | |
+| `salary` | `DECIMAL(10, 2)` | exact decimal, the usual type for money |
+
+### Setup (once)
+
+1. **Install MySQL Server** and remember the `root` password you choose.
+2. **Download MySQL Connector/J**, the JDBC driver. Get it from
+   <https://dev.mysql.com/downloads/connector/j/> (choose "Platform Independent") or from
+   Maven Central (`com.mysql:mysql-connector-j`). You need the `.jar` file, e.g.
+   `mysql-connector-j-9.4.0.jar`.
+3. **Edit the three constants** at the top of `EmployeeApp.java`: `DB_URL`, `DB_USER` and
+   `DB_PASSWORD`. You do *not* need to create the database or table. The program creates
+   them on its first run (`createDatabaseIfNotExist=true` and `CREATE TABLE IF NOT EXISTS`).
+   `setup.sql` is there if you prefer to create them yourself.
+4. **Compile and run with the jar on the classpath**, from inside `Q16/`:
+
+   ```bash
+   javac EmployeeApp.java
+   java -cp .:mysql-connector-j-9.4.0.jar EmployeeApp      # Linux / macOS
+   java -cp .;mysql-connector-j-9.4.0.jar EmployeeApp      # Windows (; instead of :)
+   ```
+
+   In Eclipse or IntelliJ, add the jar to the project's libraries / build path instead.
+
+| Error message | Meaning |
+|---|---|
+| `No suitable driver found for jdbc:mysql://...` | The Connector/J jar is not on the classpath. |
+| `Access denied for user 'root'@'localhost'` | Wrong user name or password in the constants. |
+| `Communications link failure` | The MySQL server is not running, or not on port 3306. |
+| `Public Key Retrieval is not allowed` | Add `&allowPublicKeyRetrieval=true&useSSL=false` to `DB_URL` (fine for a local lab database). |
+
+### How the code works
+
+- **JDBC in four steps.** `DriverManager.getConnection(url, user, password)` opens a
+  `Connection`. `conn.prepareStatement(sql)` prepares a command with `?` placeholders.
+  `setString` / `setDouble` / `setInt` fill in the values. `executeUpdate()` runs
+  INSERT/UPDATE/DELETE, and `executeQuery()` runs SELECT.
+- **`PreparedStatement` with `?` instead of joining strings.** Building
+  `"... VALUES ('" + name + "')"` breaks as soon as a name contains a quote (`O'Brien`), and
+  it lets a user inject their own SQL (*SQL injection*). With `?` placeholders the driver
+  sends the values separately from the command, so any text is safe. The test run above
+  stored `O'Brien` correctly.
+- **`executeUpdate()` returns the number of rows changed.** For Update and Delete, `0` means
+  no employee has that ID, so the program says so instead of pretending it worked.
+- **`RETURN_GENERATED_KEYS`** asks MySQL for the `id` it just generated, so *Add* can report
+  "Employee added with ID 3."
+- **`ResultSet`** works like a cursor over the rows of a SELECT. `while (rs.next())` visits
+  each row, and `rs.getString("name")` reads a column.
+- **try-with-resources** closes the `Connection`, `PreparedStatement` and `ResultSet`
+  automatically, even when an error occurs. Database connections are limited, so leaving
+  them open is a real problem.
+- **Errors don't end the program.** Each menu action has its own `try/catch`. A bad number
+  (`NumberFormatException`) or a database error (`SQLException`) prints a message and the
+  menu shows again. Only a failure to *connect* ends the program, because nothing else can
+  work without a connection.
+- **Every input is read with `nextLine()` and then converted**, so names with spaces work
+  and the `nextInt()`/`nextLine()` trap from Q14 cannot happen.
+- **No `Class.forName("com.mysql.cj.jdbc.Driver")`.** Since JDBC 4 (Java 6), drivers on the
+  classpath register themselves automatically. Older lab manuals still show that line; it
+  is harmless but not needed.
+
+This run was tested against a real MySQL 8.0 server:
+
+```
+Connected to the database.
+
+===== Employee Management =====
+1. Add Employee
+2. View Employees
+3. Update Employee Salary
+4. Delete Employee
+5. Exit
+Enter your choice: 1
+Enter name: Asha Kumar
+Enter department: Engineering
+Enter salary: 75000
+Employee added with ID 1.
+...
+Enter your choice: 2
+ID    Name                 Department            Salary
+1     Asha Kumar           Engineering         75000.00
+2     O'Brien              Sales               52000.50
+...
+Enter your choice: 3
+Enter employee ID: 99
+Enter new salary: 1000
+No employee found with ID 99.
+...
+Enter your choice: 5
+Goodbye!
 ```

@@ -1,9 +1,11 @@
 *.class
 
-# Files created when the Q8-Q10 programs run
+# Files created when the Q8-Q12 programs run
 prices.txt
 tax.txt
 input.txt
 output.txt
 data.txt
 converted.txt
+bankAccount.ser
+savings.ser
